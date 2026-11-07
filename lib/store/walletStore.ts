@@ -1,5 +1,5 @@
-import { create } from "zustand"
 import type { WalletKeyPair } from "~lib/crypto/keyManagement"
+import { create } from "zustand"
 
 export interface Account {
   index: number
@@ -48,6 +48,7 @@ export const useWalletStore = create<WalletState>()((set, get) => ({
     set({
       wallet: null,
       locked: true,
+      balance: 0n,
       seedPhrase: null,
       accounts: [],
       currentAccountIndex: 0
@@ -61,7 +62,13 @@ export const useWalletStore = create<WalletState>()((set, get) => ({
       seedPhrase: seedPhrase || get().seedPhrase
     }),
 
-  setBalance: (balance) => set({ balance }),
+  setBalance: (balance) => {
+    const state = get()
+    const accounts = state.accounts.map((a) =>
+      a.index === state.currentAccountIndex ? { ...a, balance } : a
+    )
+    set({ balance, accounts })
+  },
 
   updateActivity: () => set({ lastActivity: Date.now() }),
 
@@ -78,9 +85,17 @@ export const useWalletStore = create<WalletState>()((set, get) => ({
 
   addAccount: (account) => {
     const state = get()
-    // Check if account already exists to avoid duplicates
-    const exists = state.accounts.some(a => a.index === account.index)
-    if (!exists) {
+    const idx = state.accounts.findIndex((a) => a.index === account.index)
+    if (idx >= 0) {
+      const accounts = [...state.accounts]
+      accounts[idx] = account
+      set({
+        accounts,
+        ...(state.currentAccountIndex === account.index
+          ? { balance: account.balance, wallet: account.keypair }
+          : {})
+      })
+    } else {
       set({
         accounts: [...state.accounts, account]
       })
@@ -89,7 +104,7 @@ export const useWalletStore = create<WalletState>()((set, get) => ({
 
   switchAccount: (index) => {
     const state = get()
-    const account = state.accounts.find(a => a.index === index)
+    const account = state.accounts.find((a) => a.index === index)
     if (account) {
       set({
         currentAccountIndex: index,
